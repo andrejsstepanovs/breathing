@@ -1,7 +1,9 @@
 package com.example.buteykoexercises.ui.exercise
 
+import androidx.lifecycle.SavedStateHandle
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import com.example.buteykoexercises.data.local.dao.ControlPauseDao
 import com.example.buteykoexercises.data.local.dao.ExerciseDao
 import com.example.buteykoexercises.data.local.entity.ExerciseLoopEntity
 import com.example.buteykoexercises.data.local.entity.SessionEntity
@@ -11,13 +13,16 @@ import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.firstOrNull
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import javax.inject.Inject
 
 @HiltViewModel
 class ExerciseViewModel @Inject constructor(
-    private val dao: ExerciseDao
+    private val dao: ExerciseDao,
+    private val cpDao: ControlPauseDao,   // <--- NEW: Needed for history
+    savedStateHandle: SavedStateHandle    // <--- NEW: Needed for arguments
 ) : ViewModel() {
 
     private val _state = MutableStateFlow(ExerciseUiState())
@@ -26,9 +31,55 @@ class ExerciseViewModel @Inject constructor(
     private var timerJob: Job? = null
     private var startTimeMillis: Long = 0
 
-    // --- State 1: IDLE / START SESSION ---
+    init {
+        // 1. Handle "Start Exercise" from Control Pause screen (Jump Start)
+        val initialCpArg = savedStateHandle.get<Float>("initialCp")
+        if (initialCpArg != null && initialCpArg > 0f) {
+            startSessionWithPreCheck(initialCpArg)
+        }
+
+        // 2. Load the last known CP from history (for the "Use Last" button)
+        viewModelScope.launch {
+            val lastStandalone = cpDao.getAll().firstOrNull()?.firstOrNull()
+            if (lastStandalone != null) {
+                _state.update { it.copy(lastKnownCp = lastStandalone.durationSeconds) }
+            }
+        }
+    }
+
+    // --- LOGIC: Jump Start (Skip Pre-Check via Argument) ---
+    private fun startSessionWithPreCheck(cpValue: Float) {
+        // Update UI immediately
+        _state.update {
+            it.copy(
+                step = ExerciseStep.Breathing,
+                initialCp = cpValue,
+                cpTimerSeconds = 0f,
+                breathingTimerSeconds = 0,
+                completedLoops = emptyList(),
+                isTimerRunning = true,
+                currentSessionId = null,
+                lastKnownCp = cpValue
+            )
+        }
+
+        startBreathingTimer()
+
+        // Create Session in Background
+        viewModelScope.launch {
+            val sessionId = dao.insertSession(
+                SessionEntity(timestamp = System.currentTimeMillis())
+            )
+            _state.update { it.copy(currentSessionId = sessionId) }
+        }
+    }
+
+    // --- State 1: IDLE / START SESSION (Standard Flow) ---
     fun startSession() {
         viewModelScope.launch {
+            // Refresh last known CP from DB just in case
+            val lastStandalone = cpDao.getAll().firstOrNull()?.firstOrNull()
+
             val sessionId = dao.insertSession(
                 SessionEntity(timestamp = System.currentTimeMillis())
             )
@@ -38,13 +89,28 @@ class ExerciseViewModel @Inject constructor(
                     step = ExerciseStep.PreCheckCp,
                     cpTimerSeconds = 0f,
                     isTimerRunning = false,
-                    completedLoops = emptyList() // Reset history
+                    completedLoops = emptyList(),
+                    // Set suggestion to last standalone record initially
+                    lastKnownCp = lastStandalone?.durationSeconds ?: it.lastKnownCp
                 )
             }
         }
     }
 
-    // ... (toggleCpTimer, startCpTimer, stopCpTimer remain largely the same) ...
+    // --- NEW: User clicked "Skip & Use Last" ---
+    fun useLastCpForPreCheck() {
+        val lastVal = _state.value.lastKnownCp ?: return
+
+        _state.update {
+            it.copy(
+                initialCp = lastVal,
+                step = ExerciseStep.Breathing,
+                breathingTimerSeconds = 0,
+                isTimerRunning = true
+            )
+        }
+        startBreathingTimer()
+    }
 
     fun toggleCpTimer() {
         if (_state.value.isTimerRunning) {
@@ -71,7 +137,13 @@ class ExerciseViewModel @Inject constructor(
     private fun stopCpTimer() {
         timerJob?.cancel()
         val duration = _state.value.cpTimerSeconds
-        _state.update { it.copy(isTimerRunning = false) }
+
+        _state.update {
+            it.copy(
+                isTimerRunning = false,
+                lastKnownCp = duration // <--- UPDATE: Update memory with this new measurement
+            )
+        }
 
         when (_state.value.step) {
             is ExerciseStep.PreCheckCp -> {
@@ -126,14 +198,12 @@ class ExerciseViewModel @Inject constructor(
         _state.update {
             it.copy(
                 step = ExerciseStep.RecoveryCountdown,
-                recoveryTimerSeconds = 30, // Standard 30s
+                recoveryTimerSeconds = 30,
                 isTimerRunning = true
             )
         }
         startRecoveryCountdown()
     }
-
-    // --- State 4: RECOVERY COUNTDOWN & SKIP ---
 
     private fun startRecoveryCountdown() {
         timerJob = viewModelScope.launch {
@@ -141,12 +211,10 @@ class ExerciseViewModel @Inject constructor(
                 delay(1000)
                 _state.update { it.copy(recoveryTimerSeconds = it.recoveryTimerSeconds - 1) }
             }
-            // Countdown finished naturally
             skipRecovery()
         }
     }
 
-    // NEW: Allow skipping the countdown
     fun skipRecovery() {
         timerJob?.cancel()
         _state.update {
@@ -158,12 +226,10 @@ class ExerciseViewModel @Inject constructor(
         }
     }
 
-    // --- SAVE LOGIC ---
     private fun saveLoopData() {
         val currentState = _state.value
         val sessionId = currentState.currentSessionId ?: return
 
-        // 1. Save to DB
         viewModelScope.launch {
             dao.insertLoop(
                 ExerciseLoopEntity(
@@ -176,7 +242,6 @@ class ExerciseViewModel @Inject constructor(
             )
         }
 
-        // 2. Add to local history list for display
         val newLoop = CompletedLoop(
             initialCp = currentState.initialCp,
             breathingSeconds = currentState.breathingTimerSeconds,
@@ -184,7 +249,10 @@ class ExerciseViewModel @Inject constructor(
         )
 
         _state.update {
-            it.copy(completedLoops = it.completedLoops + newLoop)
+            it.copy(
+                completedLoops = it.completedLoops + newLoop,
+                lastKnownCp = currentState.finalCp // <--- UPDATE: The loop's final CP is now the latest
+            )
         }
     }
 
@@ -198,6 +266,7 @@ class ExerciseViewModel @Inject constructor(
                 initialCp = 0f,
                 finalCp = 0f,
                 isTimerRunning = false
+                // We do NOT reset lastKnownCp here, so it persists for the next loop's PreCheck
             )
         }
     }

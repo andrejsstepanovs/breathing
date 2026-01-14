@@ -67,7 +67,9 @@ fun ExerciseScreen(
                     title = "Pre-Check CP",
                     seconds = state.cpTimerSeconds,
                     isRunning = state.isTimerRunning,
-                    onToggle = { viewModel.toggleCpTimer() }
+                    lastKnownCp = state.lastKnownCp, // Pass data
+                    onToggle = { viewModel.toggleCpTimer() },
+                    onUseLast = { viewModel.useLastCpForPreCheck() } // Pass action
                 )
 
                 is ExerciseStep.Breathing -> BreathingView(
@@ -93,7 +95,10 @@ fun ExerciseScreen(
                     title = "Post-Check CP",
                     seconds = state.cpTimerSeconds,
                     isRunning = state.isTimerRunning,
-                    onToggle = { viewModel.toggleCpTimer() }
+                    lastKnownCp = null, // Disable skipping for Post-Check to ensure accuracy? Or enable?
+                    // Let's disable for Post-Check to force measurement unless requested.
+                    onToggle = { viewModel.toggleCpTimer() },
+                    onUseLast = { }
                 )
 
                 is ExerciseStep.Summary -> SummaryView(
@@ -145,12 +150,15 @@ fun CpCheckView(
     title: String,
     seconds: Float,
     isRunning: Boolean,
-    onToggle: () -> Unit
+    lastKnownCp: Float?,
+    onToggle: () -> Unit,
+    onUseLast: () -> Unit
 ) {
     Column(horizontalAlignment = Alignment.CenterHorizontally) {
         Text(text = title, style = MaterialTheme.typography.headlineMedium)
         Spacer(modifier = Modifier.height(48.dp))
 
+        // Timer
         Text(
             text = String.format("%.1f", seconds),
             fontSize = 80.sp,
@@ -169,6 +177,18 @@ fun CpCheckView(
             modifier = Modifier.size(120.dp).clip(CircleShape)
         ) {
             Text(if (isRunning) "STOP" else "START")
+        }
+
+        // NEW: Skip Button
+        // Show only if timer is NOT running AND we have a last known value
+        if (!isRunning && lastKnownCp != null) {
+            Spacer(modifier = Modifier.height(32.dp))
+            OutlinedButton(
+                onClick = onUseLast,
+                modifier = Modifier.fillMaxWidth()
+            ) {
+                Text("SKIP & USE LAST (${String.format("%.1f", lastKnownCp)} s)")
+            }
         }
     }
 }

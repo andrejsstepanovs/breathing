@@ -33,5 +33,8 @@ data class ExerciseUiState(
     // History within the current session
     val completedLoops: List<CompletedLoop> = emptyList(),
 
+    // Suggestion for skipping
+    val lastKnownCp: Float? = null,
+
     val isTimerRunning: Boolean = false
 )
