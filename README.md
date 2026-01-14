@@ -6,6 +6,18 @@ A native Android application for tracking Buteyko breathing exercises, Control P
 
 Download and install the APK from [Releases](https://github.com/andrejsstepanovs/breathing/releases/latest) or build from source.
 
+## Preview
+
+<p align="center">
+  <img src="screenshots/control_pause.jpg" width="300" alt="App Screenshot Landscape"/>
+</p>
+<p align="center">
+  <img src="screenshots/menu.jpg" width="300" alt="App Screenshot Portrait"/>
+</p>
+<p align="center">
+  <img src="screenshots/history.jpg" width="300" alt="App Screenshot Portrait"/>
+</p>
+
 ## Tech Stack
 
 * **Language:** Kotlin
