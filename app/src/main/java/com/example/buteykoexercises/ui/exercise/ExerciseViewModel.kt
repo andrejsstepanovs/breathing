@@ -97,6 +97,43 @@ class ExerciseViewModel @Inject constructor(
         }
     }
 
+    fun abandonCurrentLoop() {
+        // 1. Stop any running timers
+        timerJob?.cancel()
+
+        val currentSessionId = _state.value.currentSessionId
+        val completed = _state.value.completedLoops
+
+        if (completed.isEmpty()) {
+            // Case A: User abandoning the FIRST loop (0 completed).
+            // Delete the session so we don't save an empty record.
+            viewModelScope.launch {
+                if (currentSessionId != null) {
+                    dao.deleteSessionById(currentSessionId)
+                }
+                // Reset to Idle
+                _state.update { ExerciseUiState() }
+            }
+        } else {
+            // Case B: User abandoning a subsequent loop (e.g., Loop 2).
+            // Discard current progress and go back to Summary of the LAST completed loop.
+            val lastLoop = completed.last()
+
+            _state.update {
+                it.copy(
+                    step = ExerciseStep.Summary,
+                    isTimerRunning = false,
+                    cpTimerSeconds = 0f,
+                    breathingTimerSeconds = lastLoop.breathingSeconds, // Show last loop's stats
+                    initialCp = lastLoop.initialCp,
+                    finalCp = lastLoop.finalCp,
+                    // Revert lastKnownCp to the end of the previous loop
+                    lastKnownCp = lastLoop.finalCp
+                )
+            }
+        }
+    }
+
     // --- NEW: User clicked "Skip & Use Last" ---
     fun useLastCpForPreCheck() {
         val lastVal = _state.value.lastKnownCp ?: return

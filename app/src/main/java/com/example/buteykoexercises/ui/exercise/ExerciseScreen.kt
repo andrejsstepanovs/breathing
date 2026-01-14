@@ -67,9 +67,11 @@ fun ExerciseScreen(
                     title = "Pre-Check CP",
                     seconds = state.cpTimerSeconds,
                     isRunning = state.isTimerRunning,
-                    lastKnownCp = state.lastKnownCp, // Pass data
+                    lastKnownCp = state.lastKnownCp,
                     onToggle = { viewModel.toggleCpTimer() },
-                    onUseLast = { viewModel.useLastCpForPreCheck() } // Pass action
+                    onUseLast = { viewModel.useLastCpForPreCheck() },
+                    onAbandon = { viewModel.abandonCurrentLoop() },
+                    isFirstLoop = state.completedLoops.isEmpty()
                 )
 
                 is ExerciseStep.Breathing -> BreathingView(
@@ -80,7 +82,8 @@ fun ExerciseScreen(
                 is ExerciseStep.Paused -> PausedView(
                     seconds = state.breathingTimerSeconds,
                     onResume = { viewModel.resumeBreathing() },
-                    onFinish = { viewModel.finishBreathing() }
+                    onFinish = { viewModel.finishBreathing() },
+                    onAbandon = { viewModel.abandonCurrentLoop() }
                 )
 
                 is ExerciseStep.RecoveryCountdown -> RecoveryView(
@@ -95,10 +98,17 @@ fun ExerciseScreen(
                     title = "Post-Check CP",
                     seconds = state.cpTimerSeconds,
                     isRunning = state.isTimerRunning,
-                    lastKnownCp = null, // Disable skipping for Post-Check to ensure accuracy? Or enable?
-                    // Let's disable for Post-Check to force measurement unless requested.
+                    // We typically don't want to skip/use last for the *final* check
+                    // of a loop, so we pass null.
+                    lastKnownCp = null,
                     onToggle = { viewModel.toggleCpTimer() },
-                    onUseLast = { }
+                    onUseLast = { },
+                    // Pass an empty lambda or specific logic.
+                    // Usually you can't abandon a loop *after* you've already finished it
+                    // (which PostCheck implies), but we must satisfy the signature.
+                    // Or, we can allow cancelling the *recording* of this final CP.
+                    onAbandon = { viewModel.abandonCurrentLoop() },
+                    isFirstLoop = false // Post-check implies we are deep in a loop
                 )
 
                 is ExerciseStep.Summary -> SummaryView(
@@ -152,13 +162,14 @@ fun CpCheckView(
     isRunning: Boolean,
     lastKnownCp: Float?,
     onToggle: () -> Unit,
-    onUseLast: () -> Unit
+    onUseLast: () -> Unit,
+    onAbandon: () -> Unit,
+    isFirstLoop: Boolean
 ) {
     Column(horizontalAlignment = Alignment.CenterHorizontally) {
         Text(text = title, style = MaterialTheme.typography.headlineMedium)
         Spacer(modifier = Modifier.height(48.dp))
 
-        // Timer
         Text(
             text = String.format("%.1f", seconds),
             fontSize = 80.sp,
@@ -179,15 +190,30 @@ fun CpCheckView(
             Text(if (isRunning) "STOP" else "START")
         }
 
-        // NEW: Skip Button
-        // Show only if timer is NOT running AND we have a last known value
-        if (!isRunning && lastKnownCp != null) {
-            Spacer(modifier = Modifier.height(32.dp))
-            OutlinedButton(
-                onClick = onUseLast,
+        Spacer(modifier = Modifier.height(32.dp))
+
+        // Actions when NOT running
+        if (!isRunning) {
+            // Skip Option
+            if (lastKnownCp != null) {
+                OutlinedButton(
+                    onClick = onUseLast,
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    Text("SKIP & USE LAST (${String.format("%.1f", lastKnownCp)} s)")
+                }
+                Spacer(modifier = Modifier.height(16.dp))
+            }
+
+            // Cancel / Abandon Option
+            TextButton(
+                onClick = onAbandon,
                 modifier = Modifier.fillMaxWidth()
             ) {
-                Text("SKIP & USE LAST (${String.format("%.1f", lastKnownCp)} s)")
+                Text(
+                    text = if (isFirstLoop) "CANCEL SESSION" else "CANCEL ROUND & FINISH",
+                    color = Color.Gray
+                )
             }
         }
     }
@@ -220,7 +246,12 @@ fun BreathingView(seconds: Long, onPause: () -> Unit) {
 }
 
 @Composable
-fun PausedView(seconds: Long, onResume: () -> Unit, onFinish: () -> Unit) {
+fun PausedView(
+    seconds: Long,
+    onResume: () -> Unit,
+    onFinish: () -> Unit,
+    onAbandon: () -> Unit
+) {
     val min = seconds / 60
     val sec = seconds % 60
 
@@ -249,7 +280,16 @@ fun PausedView(seconds: Long, onResume: () -> Unit, onFinish: () -> Unit) {
                 Text("NEXT STEP")
             }
         }
-        // REMOVED: The explanatory text is gone.
+
+        Spacer(modifier = Modifier.height(24.dp))
+
+        // Abandon Button
+        TextButton(
+            onClick = onAbandon,
+            colors = ButtonDefaults.textButtonColors(contentColor = MaterialTheme.colorScheme.error)
+        ) {
+            Text("ABANDON ROUND")
+        }
     }
 }
 
