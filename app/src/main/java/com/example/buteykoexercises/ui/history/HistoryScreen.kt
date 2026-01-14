@@ -4,6 +4,7 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material3.*
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
@@ -105,10 +106,11 @@ fun SessionItem(item: HistoryItem.Session) {
         modifier = Modifier.fillMaxWidth()
     ) {
         Column(modifier = Modifier.padding(16.dp)) {
-            // Header
+            // Header: Date and Loop Count
             Row(
                 modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.SpaceBetween
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
             ) {
                 Column {
                     Text(
@@ -122,56 +124,110 @@ fun SessionItem(item: HistoryItem.Session) {
                         color = Color.Gray
                     )
                 }
-                Text(
-                    text = "${item.loops.size} Loop(s)",
-                    style = MaterialTheme.typography.labelMedium
-                )
-            }
-
-            Spacer(modifier = Modifier.height(12.dp))
-
-            // Loops List
-            item.loops.forEachIndexed { index, loop ->
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.SpaceBetween
-                ) {
+                Badge(containerColor = MaterialTheme.colorScheme.tertiaryContainer) {
                     Text(
-                        text = "#${index + 1}",
-                        style = MaterialTheme.typography.bodyMedium,
-                        fontWeight = FontWeight.Bold,
-                        color = Color.Gray,
-                        modifier = Modifier.width(32.dp)
-                    )
-
-                    Text(
-                        text = "CP: ${String.format("%.1f", loop.initialCp)}",
-                        style = MaterialTheme.typography.bodyMedium
-                    )
-                    Text("→")
-                    val min = loop.breatheTime / 60
-                    val sec = loop.breatheTime % 60
-                    Text(
-                        text = String.format("%d:%02d", min, sec),
-                        style = MaterialTheme.typography.bodyMedium
-                    )
-                    Text("→")
-                    Text(
-                        text = "CP: ${String.format("%.1f", loop.finalCp)}",
-                        style = MaterialTheme.typography.bodyMedium
+                        text = "${item.loops.size} Loop(s)",
+                        modifier = Modifier.padding(4.dp),
+                        color = MaterialTheme.colorScheme.onTertiaryContainer
                     )
                 }
+            }
+
+            Spacer(modifier = Modifier.height(16.dp))
+            HorizontalDivider(color = Color.Gray.copy(alpha = 0.2f))
+
+            // Loops List - Improved Layout
+            item.loops.forEachIndexed { index, loop ->
+                val min = loop.breatheTime / 60
+                val sec = loop.breatheTime % 60
+
+                Column(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(vertical = 12.dp)
+                ) {
+                    // Line 1: Loop Number + Breathing Time (Highlight)
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Text(
+                            text = "Loop ${index + 1}",
+                            style = MaterialTheme.typography.titleSmall,
+                            fontWeight = FontWeight.Bold
+                        )
+
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Icon(
+                                imageVector = androidx.compose.material.icons.Icons.Default.PlayArrow,
+                                contentDescription = null,
+                                modifier = Modifier.size(14.dp),
+                                tint = MaterialTheme.colorScheme.primary
+                            )
+                            Spacer(modifier = Modifier.width(4.dp))
+                            Text(
+                                text = String.format("%d:%02d", min, sec),
+                                style = MaterialTheme.typography.bodyMedium,
+                                fontWeight = FontWeight.Bold,
+                                color = MaterialTheme.colorScheme.primary
+                            )
+                        }
+                    }
+
+                    Spacer(modifier = Modifier.height(8.dp))
+
+                    // Line 2: CP Progress (Start -> End)
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        // Start CP
+                        Column(modifier = Modifier.weight(1f)) {
+                            Text(
+                                text = "Start CP",
+                                style = MaterialTheme.typography.labelSmall,
+                                color = Color.Gray
+                            )
+                            Text(
+                                text = String.format("%.1f s", loop.initialCp),
+                                style = MaterialTheme.typography.bodyLarge
+                            )
+                        }
+
+                        // Arrow visual
+                        Text(
+                            text = "→",
+                            modifier = Modifier.padding(horizontal = 8.dp),
+                            color = Color.Gray
+                        )
+
+                        // End CP
+                        Column(modifier = Modifier.weight(1f)) {
+                            Text(
+                                text = "End CP",
+                                style = MaterialTheme.typography.labelSmall,
+                                color = Color.Gray
+                            )
+                            Text(
+                                text = String.format("%.1f s", loop.finalCp),
+                                style = MaterialTheme.typography.bodyLarge,
+                                fontWeight = FontWeight.Bold // Highlight final result
+                            )
+                        }
+                    }
+                }
+
+                // Divider between loops (except last one)
                 if (index < item.loops.size - 1) {
-                    HorizontalDivider(modifier = Modifier.padding(vertical = 4.dp), color = Color.Gray.copy(alpha = 0.2f))
+                    HorizontalDivider(color = Color.Gray.copy(alpha = 0.2f))
                 }
             }
 
             // Note footer
             if (!item.note.isNullOrBlank()) {
-                Spacer(modifier = Modifier.height(12.dp))
                 HorizontalDivider(color = Color.Gray.copy(alpha = 0.5f))
-                Spacer(modifier = Modifier.height(8.dp))
+                Spacer(modifier = Modifier.height(12.dp))
                 Text(
                     text = "Note: ${item.note}",
                     style = MaterialTheme.typography.bodySmall,

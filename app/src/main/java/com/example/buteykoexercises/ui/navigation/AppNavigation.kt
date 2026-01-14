@@ -74,7 +74,7 @@ fun MainAppShell() {
                     style = MaterialTheme.typography.titleLarge
                 )
                 HorizontalDivider()
-                
+
                 items.forEach { item ->
                     NavigationDrawerItem(
                         icon = { Icon(item.icon, contentDescription = null) },
@@ -83,14 +83,16 @@ fun MainAppShell() {
                         onClick = {
                             selectedItem = item
                             scope.launch { drawerState.close() }
-                            
-                            // Navigate and clear back stack to avoid pile-up
+
                             navController.navigate(item.route) {
                                 popUpTo(NavRoutes.CONTROL_PAUSE) {
                                     saveState = true
                                 }
                                 launchSingleTop = true
-                                restoreState = true
+
+                                // Only restore state if it is NOT History.
+                                // If it IS History, false means we reset to the top of that stack (the list).
+                                restoreState = (item.route != NavRoutes.HISTORY)
                             }
                         },
                         modifier = Modifier.padding(NavigationDrawerItemDefaults.ItemPadding)
