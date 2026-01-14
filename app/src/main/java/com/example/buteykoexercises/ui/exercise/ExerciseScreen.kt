@@ -8,6 +8,8 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material3.*
+import androidx.compose.material3.ButtonDefaults
+import androidx.compose.material3.MaterialTheme
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -27,7 +29,6 @@ fun ExerciseScreen(
     val state by viewModel.state.collectAsState()
 
     // --- NEW: Keep Screen On Logic ---
-    // Active only when in Reduced Breathing (or you can enable for all steps !is Idle)
     if (state.step is ExerciseStep.Breathing) {
         KeepScreenOn()
     }
@@ -98,17 +99,11 @@ fun ExerciseScreen(
                     title = "Post-Check CP",
                     seconds = state.cpTimerSeconds,
                     isRunning = state.isTimerRunning,
-                    // We typically don't want to skip/use last for the *final* check
-                    // of a loop, so we pass null.
                     lastKnownCp = null,
                     onToggle = { viewModel.toggleCpTimer() },
                     onUseLast = { },
-                    // Pass an empty lambda or specific logic.
-                    // Usually you can't abandon a loop *after* you've already finished it
-                    // (which PostCheck implies), but we must satisfy the signature.
-                    // Or, we can allow cancelling the *recording* of this final CP.
                     onAbandon = { viewModel.abandonCurrentLoop() },
-                    isFirstLoop = false // Post-check implies we are deep in a loop
+                    isFirstLoop = false
                 )
 
                 is ExerciseStep.Summary -> SummaryView(
@@ -206,13 +201,14 @@ fun CpCheckView(
             }
 
             // Cancel / Abandon Option
+
             TextButton(
                 onClick = onAbandon,
-                modifier = Modifier.fillMaxWidth()
+                modifier = Modifier.fillMaxWidth(),
+                colors = ButtonDefaults.textButtonColors(contentColor = MaterialTheme.colorScheme.error)
             ) {
                 Text(
                     text = if (isFirstLoop) "CANCEL SESSION" else "CANCEL ROUND & FINISH",
-                    color = Color.Gray
                 )
             }
         }
@@ -343,7 +339,8 @@ fun RecoveryView(
         ) {
             itemsIndexed(completedLoops) { index, loop ->
                 LoopStatRow(
-                    label = "Loop ${index + 1}",
+                    // CHANGED: "Loop" -> "Round"
+                    label = "Round ${index + 1}",
                     initial = loop.initialCp,
                     breathe = loop.breathingSeconds,
                     final = loop.finalCp,
@@ -353,7 +350,8 @@ fun RecoveryView(
 
             item {
                 LoopStatRow(
-                    label = "Loop ${completedLoops.size + 1} (Now)",
+                    // CHANGED: "Loop" -> "Round"
+                    label = "Round ${completedLoops.size + 1} (Now)",
                     initial = currentInitialCp,
                     breathe = currentBreatheTime,
                     final = null,
@@ -419,7 +417,8 @@ fun SummaryView(
     val sec = breatheTime % 60
 
     Column(horizontalAlignment = Alignment.CenterHorizontally) {
-        Text("Loop Complete!", style = MaterialTheme.typography.headlineMedium)
+        // CHANGED: "Loop" -> "Round"
+        Text("Round Complete!", style = MaterialTheme.typography.headlineMedium)
 
         Spacer(modifier = Modifier.height(24.dp))
 
